@@ -226,15 +226,15 @@ export default function Home() {
           }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)' }}>
-              Nuvio Account Cloner
+              Reframe Account Manager
             </span>
           </div>
           <h1 style={{ fontSize: isMobile ? 28 : 42, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.1, marginBottom: 16 }}>
-            Your Nuvio accounts,<br />
-            <span style={{ color: 'var(--accent)' }}>fully in control</span>
+            Your Reframe library,<br />
+            <span style={{ color: 'var(--accent)' }}>from a browser</span>
           </h1>
           <p style={{ fontSize: isMobile ? 14 : 16, color: 'var(--text-muted)', lineHeight: 1.7, maxWidth: 500, margin: '0 auto' }}>
-            Clone profiles across accounts, manage addons and plugins, and monitor service health — all from one place.
+            Sign in with the same email as the TV app. Manage addons, plugins, collections, and profiles on your backend.
           </p>
         </div>
 
@@ -327,46 +327,14 @@ export default function Home() {
           <StatusCard />
         </div>
 
-        {/* Ko-fi */}
-        <div style={{
-          display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-          alignItems: 'center', justifyContent: 'center',
-          gap: 12, marginBottom: 32,
-          background: '#111118', border: '1px solid var(--border)',
-          borderRadius: 12, padding: '16px 20px',
-        }}>
-          <div style={{ textAlign: isMobile ? 'center' : 'left' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>
-              ☕ Find this useful?
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              This tool is free and takes time to maintain. Tips are always appreciated!
-            </div>
-          </div>
-          <a href="https://ko-fi.com/techuhak" target="_blank" rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0,
-              background: '#FF5E5B', border: 'none', borderRadius: 8,
-              padding: '10px 20px', color: '#fff', fontSize: 13, fontWeight: 700,
-              textDecoration: 'none', transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = '0.85' }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M23.881 8.948c-.773-4.085-4.859-4.593-4.859-4.593H.723c-.604 0-.679.798-.679.798s-.082 7.324-.022 11.822c.164 2.424 2.586 2.672 2.586 2.672s8.267-.023 11.966-.049c2.438-.426 2.683-2.566 2.658-3.734 4.352.24 7.422-2.831 6.649-6.916zm-11.062 3.511c-1.246 1.453-4.011 3.976-4.011 3.976s-.121.119-.31.023c-.076-.057-.108-.09-.108-.09-.443-.441-3.368-3.049-4.034-3.954-.728-.995-.844-3.203.895-4.13 1.313-.736 2.617-.108 3.172.515l.237.275.237-.275c.555-.623 1.86-1.251 3.172-.515 1.739.927 1.623 3.135.75 4.181z"/>
-            </svg>
-            Support on Ko-fi
-          </a>
-        </div>
-
         {/* Footer */}
-        <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-          Uses the official{' '}
-          <a href="https://nuvioapp.space/docs?doc=cloud-api" target="_blank" rel="noopener noreferrer"
+        <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, lineHeight: 1.7 }}>
+          Fork of{' '}
+          <a href="https://github.com/techuhak/Nuvio-Account-Manager" target="_blank" rel="noopener noreferrer"
             style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-            Nuvio Cloud API
+            Nuvio Account Manager
           </a>
-          {' '}· Credentials are never stored
+          {' '}· Talks to your Reframe backend, not api.nuvio.tv
         </div>
       </div>
     </div>

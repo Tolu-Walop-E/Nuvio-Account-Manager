@@ -1512,13 +1512,7 @@ export default function Manage() {
 
         {/* Footer */}
         <div style={{ marginTop: 48, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-          <p>Uses the official{' '}
-            <a href="https://nuvioapp.space/docs?doc=cloud-api" target="_blank" rel="noopener noreferrer"
-              style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-              Nuvio Cloud API
-            </a>
-            {' '}· Account credentials are stored locally in your browser only
-          </p>
+          <p>Writes to your Reframe backend · Account credentials stay in this browser only</p>
         </div>
       </div>
 

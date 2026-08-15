@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
         exportedBy: email ?? 'unknown',
         profileId,
         version: '1.0',
-        tool: 'Nuvio Account Manager',
+        tool: 'Reframe Account Manager',
       },
       profiles,
       addons,

@@ -513,7 +513,7 @@ export default function Home() {
           }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)' }}>
-              Nuvio Account Cloner
+              Reframe Account Cloner
             </span>
           </div>
           <h1 style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.15, marginBottom: 12 }}>
@@ -752,13 +752,7 @@ export default function Home() {
 
         {/* Footer */}
         <div style={{ marginTop: 48, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
-          <p>Uses the official{' '}
-            <a href="https://nuvioapp.space/docs?doc=cloud-api" target="_blank" rel="noopener noreferrer"
-              style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-              Nuvio Cloud API
-            </a>
-            {' '}· Credentials are never stored
-          </p>
+          <p>Writes to your Reframe backend · Credentials are never stored on the server</p>
         </div>
       </div>
     </div>

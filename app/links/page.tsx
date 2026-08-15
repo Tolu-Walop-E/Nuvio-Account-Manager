@@ -78,12 +78,12 @@ const categories: Category[] = [
     icon: <NuvioIcon />,
     accent: '#22c55e',
     links: [
-      { label: 'Nuvio Website', url: 'https://nuvioapp.space', description: 'Official Nuvio home page' },
-      { label: 'Nuvio Account Dashboard', url: 'https://nuvioapp.space/account', description: 'Manage your account, profiles, and addons online' },
-      { label: 'Nuvio Mobile (Android/iOS)', url: 'https://github.com/NuvioMedia/NuvioMobile/releases', description: 'Latest APK and iOS releases on GitHub' },
-      { label: 'Nuvio TV (Android TV)', url: 'https://github.com/NuvioMedia/NuvioTV/releases', description: 'Latest Android TV releases on GitHub' },
-      { label: 'Cloud API Docs', url: 'https://nuvioapp.space/docs?doc=cloud-api', description: 'Official Nuvio Cloud API documentation' },
-      { label: 'Nuvio GitHub', url: 'https://github.com/NuvioMedia', description: 'Open source repositories for the Nuvio app' },
+      { label: 'Reframe TV', url: 'https://github.com/Tolu-Walop-E/Nuvio_Reframe', description: 'This fork’s Android TV app' },
+      { label: 'TV sign-in page', url: 'https://voluble-beijinho-468662.netlify.app/', description: 'QR / email approve page for Shield and other TVs' },
+      { label: 'This dashboard', url: '/', description: 'Manage addons, plugins, collections, and profiles' },
+      { label: 'Nuvio Website', url: 'https://nuvio.tv', description: 'Official Nuvio marketing site' },
+      { label: 'Nuvio TV (upstream)', url: 'https://github.com/NuvioMedia/NuvioTV/releases', description: 'Official Android TV releases' },
+      { label: 'Nuvio GitHub', url: 'https://github.com/NuvioMedia', description: 'Official Nuvio repositories' },
     ],
   },
   {

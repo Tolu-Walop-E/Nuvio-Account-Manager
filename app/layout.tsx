@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Nuvio Account Manager',
-  description: 'Clone your Nuvio addons, plugins, and collections across multiple accounts',
+  title: 'Reframe Account Manager',
+  description: 'Manage Reframe addons, plugins, collections, and profiles on your own Nuvio backend',
 }
 
 export const viewport: Viewport = {
