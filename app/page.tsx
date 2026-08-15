@@ -4,10 +4,6 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 import { useIsMobile } from '@/lib/useIsMobile'
 
-const STUDIO_URL =
-  process.env.NEXT_PUBLIC_REFRAME_STUDIO_URL?.trim() ||
-  'https://github.com/Tolu-Walop-E/Nuvio_Reframe_Studio'
-
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 function ArrowIcon() {
@@ -268,7 +264,7 @@ export default function Home() {
             description="Design the Netflix home layout, then Send to TV for the profile you have selected."
             bullets={['Drag rails onto a TV canvas', 'Point slots at your catalogs & collections', 'Send a pack per profile', 'TV shows an accept dialog while watching']}
             accent="#38bdf8"
-            onClick={() => window.open(STUDIO_URL, '_blank', 'noopener,noreferrer')}
+            onClick={() => router.push('/studio')}
           />
         </div>
 

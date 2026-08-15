@@ -78,7 +78,7 @@ const categories: Category[] = [
     icon: <NuvioIcon />,
     accent: '#22c55e',
     links: [
-      { label: 'Reframe Studio', url: process.env.NEXT_PUBLIC_REFRAME_STUDIO_URL?.trim() || 'https://github.com/Tolu-Walop-E/Nuvio_Reframe_Studio', description: 'Visual home layout editor — Send to TV per profile' },
+      { label: 'Reframe Studio', url: '/studio', description: 'Visual home layout editor — Send to TV per profile' },
       { label: 'Reframe TV', url: 'https://github.com/Tolu-Walop-E/Nuvio_Reframe', description: 'This fork’s Android TV app' },
       { label: 'TV sign-in page', url: 'https://voluble-beijinho-468662.netlify.app/', description: 'QR / email approve page for Shield and other TVs' },
       { label: 'This dashboard', url: '/', description: 'Manage addons, plugins, collections, and profiles' },

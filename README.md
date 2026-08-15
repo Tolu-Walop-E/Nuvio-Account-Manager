@@ -10,7 +10,7 @@ Sign in with the same email and password as the TV app. Addons, plugins, collect
 - Push RPCs send `p_origin_client_id` (required by this backend)
 - Library restore uses `sync_push_library_items`
 - Profile rename uses `sync_push_profiles` (direct table PATCH is not granted)
-- Home page links to [Reframe Studio](https://github.com/Tolu-Walop-E/Nuvio_Reframe_Studio). Override with `NEXT_PUBLIC_REFRAME_STUDIO_URL` when Studio is hosted.
+- Home includes **Reframe Studio** at `/studio` (same deploy as this dashboard)
 
 ## Local run
 
@@ -31,7 +31,6 @@ Set these project env vars, then deploy:
 
 - `NEXT_PUBLIC_NUVIO_SUPABASE_URL`
 - `NEXT_PUBLIC_NUVIO_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_REFRAME_STUDIO_URL` (optional; Studio site or GitHub)
 
 Use the publishable/anon key only. Never put a service-role key in this app.
 
