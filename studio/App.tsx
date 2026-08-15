@@ -159,6 +159,8 @@ function rowTitle(block: ViewBlock): string {
 export default function App() {
   const [pack, setPack] = useState<ViewPack>(() => clonePack(DEMO_PACKS[1].pack));
   const [selectedId, setSelectedId] = useState<string | null>("hero");
+  const [selectedIds, setSelectedIds] = useState<string[]>(["hero"]);
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>("hero");
   const [mode, setMode] = useState<StudioMode>("arrange");
   const [zoom, setZoom] = useState<number | "fit">("fit");
   const [fitScale, setFitScale] = useState(0.42);
@@ -271,6 +273,8 @@ export default function App() {
             ? (ordered.find((b) => b.type === "hero")?.id ?? ordered[0]?.id ?? null)
             : (ordered[0]?.id ?? null);
       setSelectedId(pick);
+      setSelectedIds(pick ? [pick] : []);
+      setSelectionAnchorId(pick);
     },
     [commit],
   );
@@ -377,6 +381,41 @@ export default function App() {
     return () => observer.disconnect();
   }, []);
 
+  const focusRow = useCallback((id: string | null) => {
+    setSelectedId(id);
+    setSelectedIds(id ? [id] : []);
+    setSelectionAnchorId(id);
+  }, []);
+
+  const selectRow = useCallback((id: string, event: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
+    const ordered = orderRows(packRef.current.blocks).map((b) => b.id);
+    const additive = event.metaKey || event.ctrlKey;
+    if (event.shiftKey) {
+      const anchor = selectionAnchorId ?? selectedId ?? id;
+      const a = ordered.indexOf(anchor);
+      const b = ordered.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        const lo = Math.min(a, b);
+        const hi = Math.max(a, b);
+        setSelectedIds(ordered.slice(lo, hi + 1));
+        setSelectedId(id);
+        return;
+      }
+    }
+    if (additive) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id) && next.size > 1) next.delete(id);
+        else next.add(id);
+        return ordered.filter((rowId) => next.has(rowId));
+      });
+      setSelectedId(id);
+      setSelectionAnchorId(id);
+      return;
+    }
+    focusRow(id);
+  }, [focusRow, selectedId, selectionAnchorId]);
+
   const updateBlock = useCallback(
     (id: string, patch: Partial<ViewBlock>, opts?: { live?: boolean }) => {
       const apply = (prev: ViewPack) => {
@@ -394,20 +433,28 @@ export default function App() {
   const deleteRow = useCallback(
     (id: string) => {
       const ordered = orderRows(packRef.current.blocks);
-      const index = ordered.findIndex((b) => b.id === id);
-      const fallback = ordered[index + 1]?.id ?? ordered[index - 1]?.id ?? null;
+      const removing = new Set(selectedIds.includes(id) ? selectedIds : [id]);
+      const remaining = ordered.filter((b) => !removing.has(b.id));
+      const lastRemovedIndex = ordered.reduce(
+        (acc, block, index) => (removing.has(block.id) ? index : acc),
+        -1,
+      );
+      const fallback =
+        remaining[Math.min(lastRemovedIndex, remaining.length - 1)]?.id ??
+        remaining[remaining.length - 1]?.id ??
+        null;
       commit((prev) =>
         withComputedCanvas({
           ...prev,
           blocks: stackRows(
-            orderRows(prev.blocks).filter((b) => b.id !== id),
+            orderRows(prev.blocks).filter((b) => !removing.has(b.id)),
             prev,
           ),
         }),
       );
-      setSelectedId((cur) => (cur === id ? fallback : cur));
+      focusRow(fallback);
     },
-    [commit],
+    [commit, focusRow, selectedIds],
   );
 
   const duplicateRow = useCallback(
@@ -420,6 +467,8 @@ export default function App() {
       const next = [...ordered.slice(0, index + 1), copy, ...ordered.slice(index + 1)];
       commit((prev) => withComputedCanvas({ ...prev, blocks: stackRows(next, prev) }));
       setSelectedId(copy.id);
+      setSelectedIds([copy.id]);
+      setSelectionAnchorId(copy.id);
     },
     [commit],
   );
@@ -463,6 +512,8 @@ export default function App() {
         return withComputedCanvas({ ...prev, blocks: stackRows(next, prev) });
       });
       setSelectedId(block.id);
+      setSelectedIds([block.id]);
+      setSelectionAnchorId(block.id);
       setAddAtIndex(null);
       setMode("arrange");
     },
@@ -486,9 +537,14 @@ export default function App() {
 
   const startReorder = (block: ViewBlock, event: React.PointerEvent) => {
     if (mode !== "arrange" || event.button !== 0) return;
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
     event.stopPropagation();
     event.preventDefault();
-    setSelectedId(block.id);
+    if (!selectedIds.includes(block.id) || selectedIds.length <= 1) {
+      focusRow(block.id);
+    } else {
+      setSelectedId(block.id);
+    }
     historyRef.current.past.push(packRef.current);
     historyRef.current.future = [];
     setHistoryTick((t) => t + 1);
@@ -601,6 +657,13 @@ export default function App() {
         return;
       }
       if (typing) return;
+      if (mod && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        const ids = orderRows(packRef.current.blocks).map((b) => b.id);
+        setSelectedIds(ids);
+        setSelectedId(ids[ids.length - 1] ?? null);
+        return;
+      }
       if (!selectedId) return;
 
       if ((event.key === "Delete" || event.key === "Backspace") && !mod) {
@@ -623,17 +686,22 @@ export default function App() {
         const ordered = orderRows(packRef.current.blocks);
         const index = ordered.findIndex((b) => b.id === selectedId);
         const next = ordered[index + (event.key === "ArrowDown" ? 1 : -1)];
-        if (next) setSelectedId(next.id);
+        if (!next) return;
+        if (event.shiftKey) {
+          selectRow(next.id, { shiftKey: true, ctrlKey: false, metaKey: false });
+        } else {
+          focusRow(next.id);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteRow, moveRow, redo, selectedId, undo]);
+  }, [deleteRow, focusRow, moveRow, redo, selectRow, selectedId, undo]);
 
   const clearAll = () => {
     if (!window.confirm("Remove every row from this layout?")) return;
     commit((prev) => withComputedCanvas({ ...prev, blocks: [] }));
-    setSelectedId(null);
+    focusRow(null);
   };
 
   const loadDemo = (demoId: string) => {
@@ -808,7 +876,7 @@ export default function App() {
         return;
       }
       commit(next);
-      setSelectedId(next.blocks.find((b) => b.dataSource.startsWith("catalog:"))?.id ?? null);
+      focusRow(next.blocks.find((b) => b.dataSource.startsWith("catalog:"))?.id ?? null);
       return;
     }
     if (selected.type !== "collectionRail") return;
@@ -827,7 +895,7 @@ export default function App() {
     const firstContent =
       next.blocks.find((b) => b.dataSource.startsWith("catalog:")) ??
       next.blocks.find((b) => parseFolderDataSource(b.dataSource));
-    setSelectedId(firstContent?.id ?? null);
+    focusRow(firstContent?.id ?? null);
     showToast("Expanded into folder content rails.");
   };
 
@@ -1133,6 +1201,7 @@ export default function App() {
               {displayRows.map((block, index) => {
                 const stored = storedById.get(block.id) ?? block;
                 const isSelected = selectedId === block.id;
+                const inSelection = selectedIds.includes(block.id);
                 const isDragging = draggingId === block.id;
                 const sources = sourcesForBlock(stored.type, dataSources);
                 return (
@@ -1142,6 +1211,7 @@ export default function App() {
                       "row",
                       `row-${block.type}`,
                       isSelected ? "selected" : "",
+                      inSelection && !isSelected ? "in-selection" : "",
                       isDragging ? "dragging" : "",
                       arranging ? "editable" : "",
                       index === displayRows.length - 1 ? "last" : "",
@@ -1161,7 +1231,7 @@ export default function App() {
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedId(block.id);
+                      selectRow(block.id, e);
                       setAddAtIndex(null);
                     }}
                   >
@@ -1345,6 +1415,12 @@ export default function App() {
             <>
               <h2>{rowTitle(selected)}</h2>
               <p className="hint">{blockDef(selected.type).description}</p>
+              {selectedIds.length > 1 && (
+                <p className="hint">
+                  {selectedIds.length} rows selected. Delete removes all of them. Click without Ctrl
+                  to select one.
+                </p>
+              )}
               <div className="inspector-form">
                 <label className="checkbox">
                   <input

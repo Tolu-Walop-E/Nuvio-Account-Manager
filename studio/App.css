@@ -803,6 +803,11 @@ select:focus {
   z-index: 4;
 }
 
+.row.editable.in-selection {
+  outline: 2px solid var(--focus);
+  z-index: 3;
+}
+
 .row.dragging {
   cursor: grabbing;
   z-index: 12;
