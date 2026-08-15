@@ -4,6 +4,10 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 import { useIsMobile } from '@/lib/useIsMobile'
 
+const STUDIO_URL =
+  process.env.NEXT_PUBLIC_REFRAME_STUDIO_URL?.trim() ||
+  'https://github.com/Tolu-Walop-E/Nuvio_Reframe_Studio'
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 function ArrowIcon() {
@@ -43,6 +47,16 @@ function LinksIcon() {
   return (
     <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
       <path d="M11 17H8a5 5 0 0 1 0-10h3M17 7h3a5 5 0 0 1 0 10h-3M9 14h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+function StudioIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <rect x="3" y="5" width="22" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M9 23h10M14 19v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <rect x="6" y="8" width="7" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M15 9h7M15 13h5M6 15h16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
     </svg>
   )
 }
@@ -241,20 +255,20 @@ export default function Home() {
         {/* Top two cards */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
           <Card
-            icon={<CloneIcon />}
-            title="Account Cloning"
-            description="Mirror a source profile's data to any number of target accounts in one click."
-            bullets={['Clone addons, plugins & collections', 'Push to multiple accounts at once', 'Per-target toggle control', 'Live success/error per account']}
-            accent="#6c63ff"
-            onClick={() => router.push('/clone')}
-          />
-          <Card
             icon={<ManageIcon />}
             title="Account Management"
             description="Log in and manage multiple accounts — addons, plugins, and collections per profile."
             bullets={['Manage multiple accounts at once', 'Add, remove & reorder addons', 'Enable or disable individual items', 'Switch between profiles instantly']}
             accent="#22c55e"
             onClick={() => router.push('/manage')}
+          />
+          <Card
+            icon={<StudioIcon />}
+            title="Reframe Studio"
+            description="Design the Netflix home layout, then Send to TV for the profile you have selected."
+            bullets={['Drag rails onto a TV canvas', 'Point slots at your catalogs & collections', 'Send a pack per profile', 'TV shows an accept dialog while watching']}
+            accent="#38bdf8"
+            onClick={() => window.open(STUDIO_URL, '_blank', 'noopener,noreferrer')}
           />
         </div>
 
@@ -312,6 +326,17 @@ export default function Home() {
             accent="#14b8a6"
             onClick={() => router.push('/collections')}
           />
+          <Card
+            icon={<CloneIcon />}
+            title="Account Cloning"
+            description="Mirror a source profile's data to any number of target accounts in one click."
+            bullets={['Clone addons, plugins & collections', 'Push to multiple accounts at once', 'Per-target toggle control', 'Live success/error per account']}
+            accent="#6c63ff"
+            onClick={() => router.push('/clone')}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
           <Card
             icon={<MigrateIcon />}
             title="Migrate from Stremio"
