@@ -1040,6 +1040,12 @@ export default function App() {
             }}
             onBusy={setAccountBusy}
             onError={setAccountError}
+            onResetToLiveHome={(snap) => {
+              profileLoadGen.current += 1;
+              setLibrary(snap);
+              setGenreTargets(snap.genreTargets ?? {});
+              applyHomePack(snap);
+            }}
           />
 
           <h2>

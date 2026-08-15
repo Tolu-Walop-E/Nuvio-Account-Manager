@@ -13,6 +13,8 @@ type Props = {
   onLibrary: (library: NuvioLibrarySnapshot | null) => void;
   onBusy: (busy: boolean) => void;
   onError: (error: string | null) => void;
+  /** Replace the canvas with this profile's live Nuvio home (not the saved Studio pack). */
+  onResetToLiveHome?: (library: NuvioLibrarySnapshot) => void;
 };
 
 export function AccountPanel({
@@ -24,6 +26,7 @@ export function AccountPanel({
   onLibrary,
   onBusy,
   onError,
+  onResetToLiveHome,
 }: Props) {
   const [config, setConfig] = useState<NuvioConfig>(() => defaultConfig());
   const [email, setEmail] = useState(session?.email ?? "");
@@ -69,8 +72,9 @@ export function AccountPanel({
         onSession(fresh);
       }
       const snap = await loadNuvioLibrary(config, fresh, profileId);
-      onLibrary(snap);
       setProfileId(snap.profileId);
+      if (onResetToLiveHome) onResetToLiveHome(snap);
+      else onLibrary(snap);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       onError(msg);
@@ -215,6 +219,7 @@ export function AccountPanel({
             <button type="button" className="btn ghost full" disabled={busy} onClick={() => void refresh()}>
               {busy ? "Loading…" : "Reload my Nuvio home"}
             </button>
+            <p className="hint">Resets the canvas to this profile’s live TV home rails (not the saved Studio pack).</p>
             <button type="button" className="btn ghost full danger-text" onClick={signOut}>
               Sign out
             </button>
