@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ensureFreshSession, signInWithPassword } from "../nuvio/client";
-import { defaultConfig, saveConfig, saveSession } from "../nuvio/config";
+import { defaultConfig, saveConfig, saveLastStudioProfileId, saveSession } from "../nuvio/config";
 import { loadNuvioLibrary } from "../nuvio/library";
 import type { NuvioConfig, NuvioLibrarySnapshot, NuvioSession } from "../nuvio/types";
 
@@ -30,6 +30,10 @@ export function AccountPanel({
   const [password, setPassword] = useState("");
   const [profileId, setProfileId] = useState(library?.profileId ?? 1);
   const [showKeys, setShowKeys] = useState(!config.supabaseUrl || !config.anonKey);
+
+  useEffect(() => {
+    if (library?.profileId) setProfileId(library.profileId);
+  }, [library?.profileId]);
 
   const saveKeys = () => {
     saveConfig(config);
@@ -162,12 +166,13 @@ export function AccountPanel({
           <p className="account-email">{session.email}</p>
           {library && library.profiles.length > 0 && (
             <label>
-              Profile
+              Profile (layout is per profile)
               <select
                 value={profileId}
                 onChange={(e) => {
                   const next = Number(e.target.value);
                   setProfileId(next);
+                  if (session) saveLastStudioProfileId(session.userId, next);
                   void (async () => {
                     if (!session) return;
                     onError(null);
@@ -178,6 +183,7 @@ export function AccountPanel({
                         onSession(fresh);
                       }
                       const snap = await loadNuvioLibrary(config, fresh, next);
+                      setProfileId(snap.profileId);
                       onLibrary(snap);
                     } catch (err) {
                       const msg = err instanceof Error ? err.message : String(err);

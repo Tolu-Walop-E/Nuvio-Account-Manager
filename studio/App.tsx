@@ -5,7 +5,13 @@ import { AccountPanel } from "./account/AccountPanel";
 import { BLOCK_CATALOG, blockDef, type BlockType } from "./catalog/blocks";
 import { mergeDataSources, sourcesForBlock } from "./catalog/dataSources";
 import { DEMO_PACKS, clonePack, parseViewPack } from "./demos";
-import { defaultConfig, loadSession, saveSession } from "./nuvio/config";
+import {
+  defaultConfig,
+  loadLastStudioProfileId,
+  loadSession,
+  saveLastStudioProfileId,
+  saveSession,
+} from "./nuvio/config";
 import { ensureFreshSession } from "./nuvio/client";
 import { loadNuvioLibrary } from "./nuvio/library";
 import type { NuvioLibrarySnapshot, NuvioSession } from "./nuvio/types";
@@ -43,6 +49,7 @@ import {
   loadSavedView,
   saveView,
   type SavedView,
+  type SavedViewScope,
 } from "./views/savedViews";
 import {
   MIN_ROTATE_INTERVAL_HOURS,
@@ -160,7 +167,7 @@ export default function App() {
   const [genreTargets, setGenreTargets] = useState<Record<string, GenreTarget>>({});
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
-  const [savedViews, setSavedViews] = useState<SavedView[]>(() => listSavedViews());
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [shareError, setShareError] = useState(false);
@@ -286,26 +293,57 @@ export default function App() {
     [replacePack],
   );
 
+  const savedViewScope = useMemo<SavedViewScope | null>(() => {
+    if (!session?.userId || !library?.profileId) return null;
+    return { userId: session.userId, profileId: library.profileId };
+  }, [session?.userId, library?.profileId]);
+
+  const profileLoadGen = useRef(0);
+
+  const applyProfileLayout = useCallback(
+    async (snap: NuvioLibrarySnapshot, sess: NuvioSession, loadGen?: number) => {
+      const stillCurrent = () =>
+        loadGen == null || loadGen === profileLoadGen.current;
+      saveLastStudioProfileId(sess.userId, snap.profileId);
+      setSavedViews(listSavedViews({ userId: sess.userId, profileId: snap.profileId }));
+      try {
+        const pulled = await pullViewPackFromAccount(defaultConfig(), sess, snap.profileId);
+        if (!stillCurrent()) return;
+        if (pulled?.pack) {
+          replacePack(clonePack(pulled.pack), { select: "hero" });
+          setMode("arrange");
+          return;
+        }
+      } catch {
+        // No cloud pack for this profile — fall back to that profile's home rails.
+      }
+      if (!stillCurrent()) return;
+      applyHomePack(snap);
+    },
+    [applyHomePack, replacePack],
+  );
+
   useEffect(() => {
     if (!session) return;
-    let cancelled = false;
+    const gen = ++profileLoadGen.current;
     (async () => {
       setAccountBusy(true);
       setAccountError(null);
       try {
         const fresh = await ensureFreshSession(defaultConfig(), session);
-        if (cancelled) return;
+        if (gen !== profileLoadGen.current) return;
         if (fresh.accessToken !== session.accessToken) {
           saveSession(fresh);
           setSession(fresh);
         }
-        const snap = await loadNuvioLibrary(defaultConfig(), fresh, 1);
-        if (cancelled) return;
+        const profileId = loadLastStudioProfileId(fresh.userId);
+        const snap = await loadNuvioLibrary(defaultConfig(), fresh, profileId);
+        if (gen !== profileLoadGen.current) return;
         setLibrary(snap);
         setGenreTargets(snap.genreTargets);
-        applyHomePack(snap);
+        await applyProfileLayout(snap, fresh, gen);
       } catch (e) {
-        if (cancelled) return;
+        if (gen !== profileLoadGen.current) return;
         const msg = e instanceof Error ? e.message : String(e);
         setAccountError(msg);
         if (/sign in again|session expired|jwt/i.test(msg)) {
@@ -315,14 +353,15 @@ export default function App() {
           setGenreTargets({});
         }
       } finally {
-        if (!cancelled) setAccountBusy(false);
+        if (gen === profileLoadGen.current) setAccountBusy(false);
       }
     })();
     return () => {
-      cancelled = true;
+      profileLoadGen.current += 1;
     };
+    // Only re-run when the signed-in token changes — not when layout helpers update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.accessToken, applyHomePack]);
+  }, [session?.accessToken]);
 
   /** Auto-fit the TV frame to the stage so nothing needs manual zooming. */
   useLayoutEffect(() => {
@@ -717,24 +756,29 @@ export default function App() {
 
   const saveCurrentView = () => {
     const name = window.prompt("Name this layout", pack.name || "My view")?.trim() || pack.name;
-    const saved = saveView(pack, name);
-    setSavedViews(listSavedViews());
+    const saved = saveView(pack, name, savedViewScope);
+    setSavedViews(listSavedViews(savedViewScope));
     setPack(saved.pack);
-    showToast(`Saved “${saved.name}” in this browser.`);
+    const profileLabel = library?.profiles.find((p) => p.id === library.profileId)?.name;
+    showToast(
+      profileLabel
+        ? `Saved “${saved.name}” for ${profileLabel}.`
+        : `Saved “${saved.name}” in this browser.`,
+    );
   };
 
   const openSavedView = (id: string) => {
-    const saved = loadSavedView(id);
+    const saved = loadSavedView(id, savedViewScope);
     if (!saved) return;
     replacePack(clonePack(saved.pack), { select: "hero" });
   };
 
   const removeSavedView = (id: string) => {
-    const saved = loadSavedView(id);
+    const saved = loadSavedView(id, savedViewScope);
     if (!saved) return;
     if (!window.confirm(`Delete saved layout “${saved.name}”?`)) return;
-    deleteSavedView(id);
-    setSavedViews(listSavedViews());
+    deleteSavedView(id, savedViewScope);
+    setSavedViews(listSavedViews(savedViewScope));
   };
 
   const reshufflePreview = () => {
@@ -917,17 +961,29 @@ export default function App() {
             error={accountError}
             onSession={setSession}
             onLibrary={(snap) => {
+              const gen = ++profileLoadGen.current;
               setLibrary(snap);
               setGenreTargets(snap?.genreTargets ?? {});
-              if (snap) applyHomePack(snap);
+              if (!snap || !session) {
+                setSavedViews([]);
+                return;
+              }
+              void applyProfileLayout(snap, session, gen);
             }}
             onBusy={setAccountBusy}
             onError={setAccountError}
           />
 
-          <h2>Saved layouts</h2>
+          <h2>
+            Saved layouts
+            {library
+              ? ` · ${library.profiles.find((p) => p.id === library.profileId)?.name ?? `profile ${library.profileId}`}`
+              : ""}
+          </h2>
           <ul className="stack-list">
-            {savedViews.length === 0 && <li className="hint quiet">Nothing saved in this browser yet.</li>}
+            {savedViews.length === 0 && (
+              <li className="hint quiet">Nothing saved for this profile in this browser yet.</li>
+            )}
             {savedViews.map((view) => (
               <li key={view.id} className="stack-row">
                 <button type="button" className="stack-main" onClick={() => openSavedView(view.id)}>

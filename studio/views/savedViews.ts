@@ -10,9 +10,18 @@ export type SavedView = {
   createdAt: number;
 };
 
-function readAll(): SavedView[] {
+export type SavedViewScope = {
+  userId: string;
+  profileId: number;
+};
+
+function scopeKey(scope: SavedViewScope): string {
+  return `${STORAGE_KEY}:${scope.userId}:p${scope.profileId}`;
+}
+
+function readAll(storageKey: string): SavedView[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as SavedView[];
     if (!Array.isArray(parsed)) return [];
@@ -28,16 +37,33 @@ function readAll(): SavedView[] {
   }
 }
 
-function writeAll(views: SavedView[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(views));
+function writeAll(storageKey: string, views: SavedView[]) {
+  localStorage.setItem(storageKey, JSON.stringify(views));
 }
 
-export function listSavedViews(): SavedView[] {
-  return readAll();
+/** Old unscoped list belonged to profile 1 of the first account that opens Studio. */
+function migrateLegacyIfNeeded(scope: SavedViewScope) {
+  if (scope.profileId !== 1) return;
+  const scoped = scopeKey(scope);
+  if (localStorage.getItem(scoped)) return;
+  const legacy = readAll(STORAGE_KEY);
+  if (legacy.length === 0) return;
+  writeAll(scoped, legacy);
 }
 
-export function saveView(pack: ViewPack, name?: string): SavedView {
-  const views = readAll();
+function keyFor(scope?: SavedViewScope | null): string {
+  if (!scope?.userId || !scope.profileId) return STORAGE_KEY;
+  migrateLegacyIfNeeded(scope);
+  return scopeKey(scope);
+}
+
+export function listSavedViews(scope?: SavedViewScope | null): SavedView[] {
+  return readAll(keyFor(scope));
+}
+
+export function saveView(pack: ViewPack, name?: string, scope?: SavedViewScope | null): SavedView {
+  const storageKey = keyFor(scope);
+  const views = readAll(storageKey);
   const title = (name ?? pack.name ?? "Untitled view").trim() || "Untitled view";
   const id = slugify(title);
   const now = Date.now();
@@ -54,23 +80,31 @@ export function saveView(pack: ViewPack, name?: string): SavedView {
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
-  const next = [entry, ...views.filter((v) => v.id !== id)];
-  writeAll(next);
+  writeAll(storageKey, [entry, ...views.filter((v) => v.id !== id)]);
   return entry;
 }
 
-export function loadSavedView(id: string): SavedView | null {
-  return readAll().find((v) => v.id === id) ?? null;
+export function loadSavedView(id: string, scope?: SavedViewScope | null): SavedView | null {
+  return readAll(keyFor(scope)).find((v) => v.id === id) ?? null;
 }
 
-export function deleteSavedView(id: string): void {
-  writeAll(readAll().filter((v) => v.id !== id));
+export function deleteSavedView(id: string, scope?: SavedViewScope | null): void {
+  const storageKey = keyFor(scope);
+  writeAll(
+    storageKey,
+    readAll(storageKey).filter((v) => v.id !== id),
+  );
 }
 
-export function renameSavedView(id: string, name: string): SavedView | null {
+export function renameSavedView(
+  id: string,
+  name: string,
+  scope?: SavedViewScope | null,
+): SavedView | null {
   const title = name.trim();
   if (!title) return null;
-  const views = readAll();
+  const storageKey = keyFor(scope);
+  const views = readAll(storageKey);
   const idx = views.findIndex((v) => v.id === id);
   if (idx < 0) return null;
   const updated: SavedView = {
@@ -84,6 +118,6 @@ export function renameSavedView(id: string, name: string): SavedView | null {
   };
   const next = [...views];
   next[idx] = updated;
-  writeAll(next);
+  writeAll(storageKey, next);
   return updated;
 }

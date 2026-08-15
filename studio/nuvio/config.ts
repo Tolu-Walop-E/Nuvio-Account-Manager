@@ -2,6 +2,7 @@ import type { NuvioConfig, NuvioSession } from "./types";
 
 const CONFIG_KEY = "nuvio_reframe_studio.config";
 const SESSION_KEY = "nuvio_reframe_studio.session";
+const PROFILE_KEY = "nuvio_reframe_studio.lastProfileId";
 
 export function defaultConfig(): NuvioConfig {
   const fromEnv: NuvioConfig = {
@@ -57,4 +58,19 @@ export function saveSession(session: NuvioSession | null) {
     return;
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+export function loadLastStudioProfileId(userId: string): number {
+  try {
+    const raw = localStorage.getItem(`${PROFILE_KEY}:${userId}`);
+    const id = raw ? Number(raw) : 1;
+    if (!Number.isInteger(id) || id < 1 || id > 6) return 1;
+    return id;
+  } catch {
+    return 1;
+  }
+}
+
+export function saveLastStudioProfileId(userId: string, profileId: number) {
+  localStorage.setItem(`${PROFILE_KEY}:${userId}`, String(profileId));
 }
