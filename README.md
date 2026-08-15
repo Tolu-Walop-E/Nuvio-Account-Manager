@@ -24,6 +24,8 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Deploy (Vercel)
 
+One-click: [Import this repo on Vercel](https://vercel.com/new/import?s=https://github.com/Tolu-Walop-E/Nuvio-Account-Manager)
+
 Set these project env vars, then deploy:
 
 - `NEXT_PUBLIC_NUVIO_SUPABASE_URL`
