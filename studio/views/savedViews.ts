@@ -1,4 +1,11 @@
 import { slugify, withComputedCanvas, type ViewPack } from "../types/viewPack";
+import {
+  mergeSavedLayouts,
+  pullSavedLayoutsFromAccount,
+  pushSavedLayoutsToAccount,
+} from "../nuvio/savedLayoutsCloud";
+import { defaultConfig } from "../nuvio/config";
+import type { NuvioSession } from "../nuvio/types";
 
 const STORAGE_KEY = "nuvio.reframe.studio.savedViews.v1";
 
@@ -61,6 +68,46 @@ export function listSavedViews(scope?: SavedViewScope | null): SavedView[] {
   return readAll(keyFor(scope));
 }
 
+export function replaceSavedViews(views: SavedView[], scope?: SavedViewScope | null): void {
+  writeAll(keyFor(scope), views);
+}
+
+/**
+ * Pull cloud layouts for this profile, merge with browser cache, push if local had newer copies.
+ * Survives browser clears / new devices once signed in.
+ */
+export async function syncSavedViewsWithAccount(
+  session: NuvioSession,
+  scope: SavedViewScope,
+): Promise<SavedView[]> {
+  const local = listSavedViews(scope);
+  try {
+    const remote = await pullSavedLayoutsFromAccount(defaultConfig(), session, scope.profileId);
+    const merged = mergeSavedLayouts(local, remote);
+    replaceSavedViews(merged, scope);
+    const remoteSig = JSON.stringify(remote.map((v) => [v.id, v.updatedAt]));
+    const mergedSig = JSON.stringify(merged.map((v) => [v.id, v.updatedAt]));
+    if (remoteSig !== mergedSig) {
+      await pushSavedLayoutsToAccount(defaultConfig(), session, scope.profileId, merged);
+    }
+    return merged;
+  } catch {
+    return local;
+  }
+}
+
+async function pushLocalToAccount(
+  session: NuvioSession | null | undefined,
+  scope?: SavedViewScope | null,
+) {
+  if (!session || !scope?.userId || !scope.profileId) return;
+  try {
+    await pushSavedLayoutsToAccount(defaultConfig(), session, scope.profileId, listSavedViews(scope));
+  } catch {
+    /* keep browser copy; next sync retries */
+  }
+}
+
 export function saveView(pack: ViewPack, name?: string, scope?: SavedViewScope | null): SavedView {
   const storageKey = keyFor(scope);
   const views = readAll(storageKey);
@@ -84,6 +131,17 @@ export function saveView(pack: ViewPack, name?: string, scope?: SavedViewScope |
   return entry;
 }
 
+export async function saveViewPersistent(
+  pack: ViewPack,
+  name: string | undefined,
+  scope: SavedViewScope | null | undefined,
+  session: NuvioSession | null | undefined,
+): Promise<SavedView> {
+  const entry = saveView(pack, name, scope);
+  await pushLocalToAccount(session, scope);
+  return entry;
+}
+
 export function loadSavedView(id: string, scope?: SavedViewScope | null): SavedView | null {
   return readAll(keyFor(scope)).find((v) => v.id === id) ?? null;
 }
@@ -94,6 +152,15 @@ export function deleteSavedView(id: string, scope?: SavedViewScope | null): void
     storageKey,
     readAll(storageKey).filter((v) => v.id !== id),
   );
+}
+
+export async function deleteSavedViewPersistent(
+  id: string,
+  scope: SavedViewScope | null | undefined,
+  session: NuvioSession | null | undefined,
+): Promise<void> {
+  deleteSavedView(id, scope);
+  await pushLocalToAccount(session, scope);
 }
 
 export function renameSavedView(

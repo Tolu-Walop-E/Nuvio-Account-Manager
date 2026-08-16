@@ -44,10 +44,11 @@ import {
 } from "./types/viewPack";
 import { expandCollectionIntoContentRails, expandFolderIntoCatalogRails, parseFolderDataSource } from "./views/expandCollection";
 import {
-  deleteSavedView,
+  deleteSavedViewPersistent,
   listSavedViews,
   loadSavedView,
-  saveView,
+  saveViewPersistent,
+  syncSavedViewsWithAccount,
   type SavedView,
   type SavedViewScope,
 } from "./views/savedViews";
@@ -309,7 +310,15 @@ export default function App() {
       const stillCurrent = () =>
         loadGen == null || loadGen === profileLoadGen.current;
       saveLastStudioProfileId(sess.userId, snap.profileId);
-      setSavedViews(listSavedViews({ userId: sess.userId, profileId: snap.profileId }));
+      const scope = { userId: sess.userId, profileId: snap.profileId };
+      setSavedViews(listSavedViews(scope));
+      try {
+        const synced = await syncSavedViewsWithAccount(sess, scope);
+        if (!stillCurrent()) return;
+        setSavedViews(synced);
+      } catch {
+        /* browser cache already shown */
+      }
       try {
         const pulled = await pullViewPackFromAccount(defaultConfig(), sess, snap.profileId);
         if (!stillCurrent()) return;
@@ -822,16 +831,18 @@ export default function App() {
     return [...fromLibrary, ...extras].sort((a, b) => a.label.localeCompare(b.label));
   }, [library?.genreChips, genreTargets]);
 
-  const saveCurrentView = () => {
+  const saveCurrentView = async () => {
     const name = window.prompt("Name this layout", pack.name || "My view")?.trim() || pack.name;
-    const saved = saveView(pack, name, savedViewScope);
+    const saved = await saveViewPersistent(pack, name, savedViewScope, session);
     setSavedViews(listSavedViews(savedViewScope));
     setPack(saved.pack);
     const profileLabel = library?.profiles.find((p) => p.id === library.profileId)?.name;
     showToast(
-      profileLabel
-        ? `Saved “${saved.name}” for ${profileLabel}.`
-        : `Saved “${saved.name}” in this browser.`,
+      session && savedViewScope
+        ? profileLabel
+          ? `Saved “${saved.name}” to your account · ${profileLabel}.`
+          : `Saved “${saved.name}” to your account.`
+        : `Saved “${saved.name}” in this browser only — sign in to sync.`,
     );
   };
 
@@ -841,11 +852,11 @@ export default function App() {
     replacePack(clonePack(saved.pack), { select: "hero" });
   };
 
-  const removeSavedView = (id: string) => {
+  const removeSavedView = async (id: string) => {
     const saved = loadSavedView(id, savedViewScope);
     if (!saved) return;
     if (!window.confirm(`Delete saved layout “${saved.name}”?`)) return;
-    deleteSavedView(id, savedViewScope);
+    await deleteSavedViewPersistent(id, savedViewScope, session);
     setSavedViews(listSavedViews(savedViewScope));
   };
 
@@ -1056,7 +1067,11 @@ export default function App() {
           </h2>
           <ul className="stack-list">
             {savedViews.length === 0 && (
-              <li className="hint quiet">Nothing saved for this profile in this browser yet.</li>
+              <li className="hint quiet">
+                {session
+                  ? "Nothing saved for this profile yet — Save layout stores it on your account."
+                  : "Sign in, then Save layout so it syncs to your account (not just this browser)."}
+              </li>
             )}
             {savedViews.map((view) => (
               <li key={view.id} className="stack-row">
