@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useIsMobile } from '@/lib/useIsMobile'
 
@@ -7,7 +8,9 @@ import { useIsMobile } from '@/lib/useIsMobile'
 
 interface Link {
   label: string
-  url: string
+  url?: string
+  /** Numeric / short code to copy (e.g. AFTV Downloader). */
+  code?: string
   description: string
   badge?: string
 }
@@ -80,6 +83,18 @@ const categories: Category[] = [
     links: [
       { label: 'Reframe Studio', url: '/studio', description: 'Visual home layout editor — Send to TV per profile' },
       { label: 'Reframe TV', url: 'https://github.com/Tolu-Walop-E/Nuvio_Reframe', description: 'This fork’s Android TV app' },
+      {
+        label: 'Reframe APK releases',
+        url: 'https://github.com/Tolu-Walop-E/Nuvio_Reframe/releases',
+        description: 'Download the latest arm64 APK for Shield / Fire TV',
+        badge: 'Shield',
+      },
+      {
+        label: 'AFTV Downloader code',
+        code: '5780000',
+        description: 'Open Downloader on Fire TV, enter this code, and install Reframe',
+        badge: 'Fire TV',
+      },
       { label: 'TV sign-in page', url: 'https://voluble-beijinho-468662.netlify.app/', description: 'QR / email approve page for Shield and other TVs' },
       { label: 'This dashboard', url: '/', description: 'Manage addons, plugins, collections, and profiles' },
       { label: 'Nuvio Website', url: 'https://nuvio.tv', description: 'Official Nuvio marketing site' },
@@ -138,29 +153,26 @@ const categories: Category[] = [
 
 // ─── Link row ─────────────────────────────────────────────────────────────────
 
-function LinkRow({ link, accent }: { link: Link; accent: string }) {
-  return (
-    <a href={link.url} target="_blank" rel="noopener noreferrer"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '12px 14px', borderRadius: 8,
-        background: 'var(--bg)', border: '1px solid var(--border)',
-        textDecoration: 'none', transition: 'border-color 0.15s, background 0.15s',
-        cursor: 'pointer',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.borderColor = accent
-        e.currentTarget.style.background = `${accent}08`
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'var(--border)'
-        e.currentTarget.style.background = 'var(--bg)'
-      }}
-    >
-      {/* Accent dot */}
-      <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, flexShrink: 0, marginTop: 1 }} />
+const rowShell: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  padding: '12px 14px',
+  borderRadius: 8,
+  background: 'var(--bg)',
+  border: '1px solid var(--border)',
+  textDecoration: 'none',
+  transition: 'border-color 0.15s, background 0.15s',
+  cursor: 'pointer',
+  width: '100%',
+  textAlign: 'left',
+  fontFamily: 'inherit',
+}
 
-      {/* Text */}
+function LinkText({ link, accent }: { link: Link; accent: string }) {
+  return (
+    <>
+      <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, flexShrink: 0, marginTop: 1 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{link.label}</span>
@@ -175,9 +187,90 @@ function LinkRow({ link, accent }: { link: Link; accent: string }) {
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.5 }}>
           {link.description}
         </div>
+        {link.code && (
+          <div style={{
+            marginTop: 8,
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            fontSize: 20,
+            fontWeight: 800,
+            letterSpacing: '0.12em',
+            color: accent,
+          }}>
+            {link.code}
+          </div>
+        )}
       </div>
+    </>
+  )
+}
 
-      {/* External icon */}
+function CodeRow({ link, accent }: { link: Link; accent: string }) {
+  const [copied, setCopied] = useState(false)
+  const code = link.code ?? ''
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      style={rowShell}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = accent
+        e.currentTarget.style.background = `${accent}08`
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'var(--border)'
+        e.currentTarget.style.background = 'var(--bg)'
+      }}
+    >
+      <LinkText link={link} accent={accent} />
+      <div style={{
+        flexShrink: 0,
+        fontSize: 11,
+        fontWeight: 700,
+        color: copied ? accent : 'var(--text-muted)',
+        minWidth: 52,
+        textAlign: 'right',
+      }}>
+        {copied ? 'Copied' : 'Copy'}
+      </div>
+    </button>
+  )
+}
+
+function LinkRow({ link, accent }: { link: Link; accent: string }) {
+  if (link.code) {
+    return <CodeRow link={link} accent={accent} />
+  }
+
+  const href = link.url ?? '#'
+  const external = /^https?:\/\//i.test(href)
+
+  return (
+    <a
+      href={href}
+      target={external ? '_blank' : undefined}
+      rel={external ? 'noopener noreferrer' : undefined}
+      style={rowShell}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = accent
+        e.currentTarget.style.background = `${accent}08`
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'var(--border)'
+        e.currentTarget.style.background = 'var(--bg)'
+      }}
+    >
+      <LinkText link={link} accent={accent} />
       <div style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
         <ExternalIcon />
       </div>
