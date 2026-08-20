@@ -42,7 +42,7 @@ import {
   type ViewBlock,
   type ViewPack,
 } from "./types/viewPack";
-import { expandCollectionIntoContentRails, expandFolderIntoCatalogRails, parseFolderDataSource } from "./views/expandCollection";
+import { expandCollectionIntoContentRails, expandFolderIntoCatalogRails, parseFolderDataSource, dataSourceTypeLabel } from "./views/expandCollection";
 import {
   deleteSavedViewPersistent,
   listSavedViews,
@@ -1306,6 +1306,7 @@ export default function App() {
                 const inSelection = selectedIds.includes(block.id);
                 const isDragging = draggingId === block.id;
                 const sources = sourcesForBlock(stored.type, dataSources);
+                const sourceTypeLabel = dataSourceTypeLabel(stored.dataSource);
                 return (
                   <div
                     key={block.id}
@@ -1377,13 +1378,29 @@ export default function App() {
                                 })
                               }
                             >
-                              {sources.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.label}
-                                </option>
-                              ))}
+                              {sources.map((s) => {
+                                const typeLabel = dataSourceTypeLabel(s.id);
+                                const option =
+                                  typeLabel && !s.label.toLowerCase().includes(typeLabel.toLowerCase())
+                                    ? `${s.label} · ${typeLabel}`
+                                    : s.label;
+                                return (
+                                  <option key={s.id} value={s.id}>
+                                    {option}
+                                  </option>
+                                );
+                              })}
                             </select>
                           )}
+
+                          {sourceTypeLabel ? (
+                            <span
+                              className="row-flag"
+                              title="Catalog type from this rail's source"
+                            >
+                              {sourceTypeLabel}
+                            </span>
+                          ) : null}
 
                           {stored.collectionOpenStyle === "reframe" && (
                             <span className="row-flag" title="Opens in Reframe view on the TV">
@@ -1706,9 +1723,8 @@ export default function App() {
                     {!parseFolderDataSource(selected.dataSource) &&
                       selected.type === "collectionRail" && (
                         <p className="hint">
-                          Splits this collection into one title rail per folder (Trending Anime,
-                          Popular Anime, …) using each folder&apos;s catalogs — not folder cover
-                          tiles.
+                          Splits this collection into one title rail per folder catalog, labeled
+                          Movies or TV Shows from that catalog&apos;s type.
                         </p>
                       )}
                   </>
