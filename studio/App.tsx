@@ -1,17 +1,9 @@
-"use client";
-
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AccountPanel } from "./account/AccountPanel";
 import { BLOCK_CATALOG, blockDef, type BlockType } from "./catalog/blocks";
 import { mergeDataSources, sourcesForBlock } from "./catalog/dataSources";
 import { DEMO_PACKS, clonePack } from "./demos";
-import {
-  defaultConfig,
-  loadLastStudioProfileId,
-  loadSession,
-  saveLastStudioProfileId,
-  saveSession,
-} from "./nuvio/config";
+import { defaultConfig, loadSession, saveSession } from "./nuvio/config";
 import { ensureFreshSession } from "./nuvio/client";
 import { loadNuvioLibrary } from "./nuvio/library";
 import type { NuvioLibrarySnapshot, NuvioSession } from "./nuvio/types";
@@ -42,15 +34,13 @@ import {
   type ViewBlock,
   type ViewPack,
 } from "./types/viewPack";
-import { expandCollectionIntoContentRails, expandFolderIntoCatalogRails, parseFolderDataSource, dataSourceTypeLabel } from "./views/expandCollection";
+import { expandCollectionIntoContentRails, expandFolderIntoCatalogRails, parseFolderDataSource, parseCollectionHubDataSource, dataSourceTypeLabel } from "./views/expandCollection";
 import {
-  deleteSavedViewPersistent,
+  deleteSavedView,
   listSavedViews,
   loadSavedView,
-  saveViewPersistent,
-  syncSavedViewsWithAccount,
+  saveView,
   type SavedView,
-  type SavedViewScope,
 } from "./views/savedViews";
 import {
   MIN_ROTATE_INTERVAL_HOURS,
@@ -70,10 +60,6 @@ import {
   type StudioScreen,
 } from "./nuvio/screenPacks";
 import {
-  describeGenreTarget,
-  encodeGenreTarget,
-  decodeGenreTarget,
-  genreDestinationOptions,
   homeCatalogPayloadWithGenreTargets,
   type GenreTarget,
 } from "./nuvio/genreTargets";
@@ -169,8 +155,6 @@ function rowTitle(block: ViewBlock): string {
 export default function App() {
   const [pack, setPack] = useState<ViewPack>(() => clonePack(DEMO_PACKS[1].pack));
   const [selectedId, setSelectedId] = useState<string | null>("hero");
-  const [selectedIds, setSelectedIds] = useState<string[]>(["hero"]);
-  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>("hero");
   const [mode, setMode] = useState<StudioMode>("arrange");
   const [zoom, setZoom] = useState<number | "fit">("fit");
   const [fitScale, setFitScale] = useState(0.42);
@@ -179,7 +163,7 @@ export default function App() {
   const [genreTargets, setGenreTargets] = useState<Record<string, GenreTarget>>({});
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
-  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => listSavedViews());
   const [shareBusy, setShareBusy] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [shareError, setShareError] = useState(false);
@@ -291,8 +275,6 @@ export default function App() {
             ? (ordered.find((b) => b.type === "hero")?.id ?? ordered[0]?.id ?? null)
             : (ordered[0]?.id ?? null);
       setSelectedId(pick);
-      setSelectedIds(pick ? [pick] : []);
-      setSelectionAnchorId(pick);
     },
     [commit],
   );
@@ -340,68 +322,26 @@ export default function App() {
     [replacePack],
   );
 
-  const savedViewScope = useMemo<SavedViewScope | null>(() => {
-    if (!session?.userId || !library?.profileId) return null;
-    return { userId: session.userId, profileId: library.profileId };
-  }, [session?.userId, library?.profileId]);
-
-  const profileLoadGen = useRef(0);
-
-  const applyProfileLayout = useCallback(
-    async (snap: NuvioLibrarySnapshot, sess: NuvioSession, loadGen?: number) => {
-      const stillCurrent = () =>
-        loadGen == null || loadGen === profileLoadGen.current;
-      saveLastStudioProfileId(sess.userId, snap.profileId);
-      const scope = { userId: sess.userId, profileId: snap.profileId };
-      setSavedViews(listSavedViews(scope));
-      try {
-        const synced = await syncSavedViewsWithAccount(sess, scope);
-        if (!stillCurrent()) return;
-        setSavedViews(synced);
-      } catch {
-        /* browser cache already shown */
-      }
-      try {
-        const pulled = await pullViewPackFromAccount(defaultConfig(), sess, snap.profileId);
-        if (!stillCurrent()) return;
-        if (pulled?.pack) {
-          applyLibraryScreens(snap, {
-            home: pulled.pack,
-            movies: pulled.movies,
-            shows: pulled.shows,
-          });
-          return;
-        }
-      } catch {
-        // No cloud pack for this profile — fall back to that profile's home rails.
-      }
-      if (!stillCurrent()) return;
-      applyHomePack(snap);
-    },
-    [applyHomePack, applyLibraryScreens],
-  );
-
   useEffect(() => {
     if (!session) return;
-    const gen = ++profileLoadGen.current;
+    let cancelled = false;
     (async () => {
       setAccountBusy(true);
       setAccountError(null);
       try {
         const fresh = await ensureFreshSession(defaultConfig(), session);
-        if (gen !== profileLoadGen.current) return;
+        if (cancelled) return;
         if (fresh.accessToken !== session.accessToken) {
           saveSession(fresh);
           setSession(fresh);
         }
-        const profileId = loadLastStudioProfileId(fresh.userId);
-        const snap = await loadNuvioLibrary(defaultConfig(), fresh, profileId);
-        if (gen !== profileLoadGen.current) return;
+        const snap = await loadNuvioLibrary(defaultConfig(), fresh, 1);
+        if (cancelled) return;
         setLibrary(snap);
         setGenreTargets(snap.genreTargets);
-        await applyProfileLayout(snap, fresh, gen);
+        applyHomePack(snap);
       } catch (e) {
-        if (gen !== profileLoadGen.current) return;
+        if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
         setAccountError(msg);
         if (/sign in again|session expired|jwt/i.test(msg)) {
@@ -411,15 +351,14 @@ export default function App() {
           setGenreTargets({});
         }
       } finally {
-        if (gen === profileLoadGen.current) setAccountBusy(false);
+        if (!cancelled) setAccountBusy(false);
       }
     })();
     return () => {
-      profileLoadGen.current += 1;
+      cancelled = true;
     };
-    // Only re-run when the signed-in token changes — not when layout helpers update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.accessToken]);
+  }, [session?.accessToken, applyHomePack]);
 
   /** Auto-fit the TV frame to the stage so nothing needs manual zooming. */
   useLayoutEffect(() => {
@@ -434,41 +373,6 @@ export default function App() {
     observer.observe(shell);
     return () => observer.disconnect();
   }, []);
-
-  const focusRow = useCallback((id: string | null) => {
-    setSelectedId(id);
-    setSelectedIds(id ? [id] : []);
-    setSelectionAnchorId(id);
-  }, []);
-
-  const selectRow = useCallback((id: string, event: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
-    const ordered = orderRows(packRef.current.blocks).map((b) => b.id);
-    const additive = event.metaKey || event.ctrlKey;
-    if (event.shiftKey) {
-      const anchor = selectionAnchorId ?? selectedId ?? id;
-      const a = ordered.indexOf(anchor);
-      const b = ordered.indexOf(id);
-      if (a >= 0 && b >= 0) {
-        const lo = Math.min(a, b);
-        const hi = Math.max(a, b);
-        setSelectedIds(ordered.slice(lo, hi + 1));
-        setSelectedId(id);
-        return;
-      }
-    }
-    if (additive) {
-      setSelectedIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(id) && next.size > 1) next.delete(id);
-        else next.add(id);
-        return ordered.filter((rowId) => next.has(rowId));
-      });
-      setSelectedId(id);
-      setSelectionAnchorId(id);
-      return;
-    }
-    focusRow(id);
-  }, [focusRow, selectedId, selectionAnchorId]);
 
   const updateBlock = useCallback(
     (id: string, patch: Partial<ViewBlock>, opts?: { live?: boolean }) => {
@@ -487,28 +391,20 @@ export default function App() {
   const deleteRow = useCallback(
     (id: string) => {
       const ordered = orderRows(packRef.current.blocks);
-      const removing = new Set(selectedIds.includes(id) ? selectedIds : [id]);
-      const remaining = ordered.filter((b) => !removing.has(b.id));
-      const lastRemovedIndex = ordered.reduce(
-        (acc, block, index) => (removing.has(block.id) ? index : acc),
-        -1,
-      );
-      const fallback =
-        remaining[Math.min(lastRemovedIndex, remaining.length - 1)]?.id ??
-        remaining[remaining.length - 1]?.id ??
-        null;
+      const index = ordered.findIndex((b) => b.id === id);
+      const fallback = ordered[index + 1]?.id ?? ordered[index - 1]?.id ?? null;
       commit((prev) =>
         withComputedCanvas({
           ...prev,
           blocks: stackRows(
-            orderRows(prev.blocks).filter((b) => !removing.has(b.id)),
+            orderRows(prev.blocks).filter((b) => b.id !== id),
             prev,
           ),
         }),
       );
-      focusRow(fallback);
+      setSelectedId((cur) => (cur === id ? fallback : cur));
     },
-    [commit, focusRow, selectedIds],
+    [commit],
   );
 
   const duplicateRow = useCallback(
@@ -521,8 +417,6 @@ export default function App() {
       const next = [...ordered.slice(0, index + 1), copy, ...ordered.slice(index + 1)];
       commit((prev) => withComputedCanvas({ ...prev, blocks: stackRows(next, prev) }));
       setSelectedId(copy.id);
-      setSelectedIds([copy.id]);
-      setSelectionAnchorId(copy.id);
     },
     [commit],
   );
@@ -566,8 +460,6 @@ export default function App() {
         return withComputedCanvas({ ...prev, blocks: stackRows(next, prev) });
       });
       setSelectedId(block.id);
-      setSelectedIds([block.id]);
-      setSelectionAnchorId(block.id);
       setAddAtIndex(null);
       setMode("arrange");
     },
@@ -591,14 +483,9 @@ export default function App() {
 
   const startReorder = (block: ViewBlock, event: React.PointerEvent) => {
     if (mode !== "arrange" || event.button !== 0) return;
-    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
     event.stopPropagation();
     event.preventDefault();
-    if (!selectedIds.includes(block.id) || selectedIds.length <= 1) {
-      focusRow(block.id);
-    } else {
-      setSelectedId(block.id);
-    }
+    setSelectedId(block.id);
     historyRef.current.past.push(packRef.current);
     historyRef.current.future = [];
     setHistoryTick((t) => t + 1);
@@ -711,13 +598,6 @@ export default function App() {
         return;
       }
       if (typing) return;
-      if (mod && event.key.toLowerCase() === "a") {
-        event.preventDefault();
-        const ids = orderRows(packRef.current.blocks).map((b) => b.id);
-        setSelectedIds(ids);
-        setSelectedId(ids[ids.length - 1] ?? null);
-        return;
-      }
       if (!selectedId) return;
 
       if ((event.key === "Delete" || event.key === "Backspace") && !mod) {
@@ -740,22 +620,17 @@ export default function App() {
         const ordered = orderRows(packRef.current.blocks);
         const index = ordered.findIndex((b) => b.id === selectedId);
         const next = ordered[index + (event.key === "ArrowDown" ? 1 : -1)];
-        if (!next) return;
-        if (event.shiftKey) {
-          selectRow(next.id, { shiftKey: true, ctrlKey: false, metaKey: false });
-        } else {
-          focusRow(next.id);
-        }
+        if (next) setSelectedId(next.id);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteRow, focusRow, moveRow, redo, selectRow, selectedId, undo]);
+  }, [deleteRow, moveRow, redo, selectedId, undo]);
 
   const clearAll = () => {
     if (!window.confirm("Remove every row from this layout?")) return;
     commit((prev) => withComputedCanvas({ ...prev, blocks: [] }));
-    focusRow(null);
+    setSelectedId(null);
   };
 
   const loadDemo = (demoId: string) => {
@@ -882,50 +757,26 @@ export default function App() {
     }
   };
 
-  const genreDestOptions = useMemo(() => {
-    if (!library) return [];
-    return genreDestinationOptions(library.sources, library.collections, library.catalogNames);
-  }, [library]);
-
-  const genreChipRows = useMemo(() => {
-    const fromLibrary = library?.genreChips ?? [];
-    const keys = new Set(fromLibrary.map((c) => c.key));
-    const extras = Object.keys(genreTargets)
-      .filter((k) => !keys.has(k))
-      .map((key) => ({
-        key,
-        label: key.replace(/^genre\|/i, "").replace(/\|(movie|series)$/i, "") || key,
-      }));
-    return [...fromLibrary, ...extras].sort((a, b) => a.label.localeCompare(b.label));
-  }, [library?.genreChips, genreTargets]);
-
-  const saveCurrentView = async () => {
+  const saveCurrentView = () => {
     const name = window.prompt("Name this layout", pack.name || "My view")?.trim() || pack.name;
-    const saved = await saveViewPersistent(pack, name, savedViewScope, session);
-    setSavedViews(listSavedViews(savedViewScope));
+    const saved = saveView(pack, name);
+    setSavedViews(listSavedViews());
     setPack(saved.pack);
-    const profileLabel = library?.profiles.find((p) => p.id === library.profileId)?.name;
-    showToast(
-      session && savedViewScope
-        ? profileLabel
-          ? `Saved “${saved.name}” to your account · ${profileLabel}.`
-          : `Saved “${saved.name}” to your account.`
-        : `Saved “${saved.name}” in this browser only — sign in to sync.`,
-    );
+    showToast(`Saved “${saved.name}” in this browser.`);
   };
 
   const openSavedView = (id: string) => {
-    const saved = loadSavedView(id, savedViewScope);
+    const saved = loadSavedView(id);
     if (!saved) return;
     replacePack(clonePack(saved.pack), { select: "hero" });
   };
 
-  const removeSavedView = async (id: string) => {
-    const saved = loadSavedView(id, savedViewScope);
+  const removeSavedView = (id: string) => {
+    const saved = loadSavedView(id);
     if (!saved) return;
     if (!window.confirm(`Delete saved layout “${saved.name}”?`)) return;
-    await deleteSavedViewPersistent(id, savedViewScope, session);
-    setSavedViews(listSavedViews(savedViewScope));
+    deleteSavedView(id);
+    setSavedViews(listSavedViews());
   };
 
   const reshufflePreview = () => {
@@ -955,7 +806,7 @@ export default function App() {
         return;
       }
       commit(next);
-      focusRow(next.blocks.find((b) => b.dataSource.startsWith("catalog:"))?.id ?? null);
+      setSelectedId(next.blocks.find((b) => b.dataSource.startsWith("catalog:"))?.id ?? null);
       return;
     }
     if (selected.type !== "collectionRail") return;
@@ -974,8 +825,45 @@ export default function App() {
     const firstContent =
       next.blocks.find((b) => b.dataSource.startsWith("catalog:")) ??
       next.blocks.find((b) => parseFolderDataSource(b.dataSource));
-    focusRow(firstContent?.id ?? null);
+    setSelectedId(firstContent?.id ?? null);
     showToast("Expanded into folder content rails.");
+  };
+
+  const turnSelectedIntoTextPills = () => {
+    if (!selected) return;
+    const collectionId = parseCollectionHubDataSource(selected.dataSource);
+    if (!collectionId) {
+      showToast("Point this rail at a collection first.");
+      return;
+    }
+    if (
+      selected.type !== "collectionRail" &&
+      selected.type !== "mediaRail" &&
+      selected.type !== "genreRail"
+    ) {
+      return;
+    }
+    const pillH = blockDef("genreRail").defaultH;
+    updateBlock(selected.id, {
+      type: "genreRail",
+      h: pillH,
+      trailer: false,
+      posterGrow: false,
+      showPosterLabels: undefined,
+    });
+    showToast("This rail is now text pills from the collection’s folders.");
+  };
+
+  const turnSelectedIntoCollectionCards = () => {
+    if (!selected) return;
+    if (selected.type !== "genreRail") return;
+    if (!parseCollectionHubDataSource(selected.dataSource)) return;
+    const def = blockDef("collectionRail");
+    updateBlock(selected.id, {
+      type: "collectionRail",
+      h: def.defaultH,
+    });
+    showToast("This rail is collection cards again.");
   };
 
   const arranging = mode === "arrange";
@@ -993,9 +881,6 @@ export default function App() {
         <div className="brand">
           <span className="brand-mark">Nuvio</span>
           <span className="brand-sub">Reframe Studio · vanilla Netflix contract</span>
-          <a href="/" style={{ marginLeft: 12, fontSize: 12, color: "inherit", opacity: 0.75 }}>
-            Account Manager
-          </a>
         </div>
 
         <label className="name-field">
@@ -1108,39 +993,17 @@ export default function App() {
             error={accountError}
             onSession={setSession}
             onLibrary={(snap) => {
-              const gen = ++profileLoadGen.current;
               setLibrary(snap);
               setGenreTargets(snap?.genreTargets ?? {});
-              if (!snap || !session) {
-                setSavedViews([]);
-                return;
-              }
-              void applyProfileLayout(snap, session, gen);
+              if (snap) applyHomePack(snap);
             }}
             onBusy={setAccountBusy}
             onError={setAccountError}
-            onResetToLiveHome={(snap) => {
-              profileLoadGen.current += 1;
-              setLibrary(snap);
-              setGenreTargets(snap.genreTargets ?? {});
-              applyHomePack(snap);
-            }}
           />
 
-          <h2>
-            Saved layouts
-            {library
-              ? ` · ${library.profiles.find((p) => p.id === library.profileId)?.name ?? `profile ${library.profileId}`}`
-              : ""}
-          </h2>
+          <h2>Saved layouts</h2>
           <ul className="stack-list">
-            {savedViews.length === 0 && (
-              <li className="hint quiet">
-                {session
-                  ? "Nothing saved for this profile yet — Save layout stores it on your account."
-                  : "Sign in, then Save layout so it syncs to your account (not just this browser)."}
-              </li>
-            )}
+            {savedViews.length === 0 && <li className="hint quiet">Nothing saved in this browser yet.</li>}
             {savedViews.map((view) => (
               <li key={view.id} className="stack-row">
                 <button type="button" className="stack-main" onClick={() => openSavedView(view.id)}>
@@ -1303,7 +1166,6 @@ export default function App() {
               {displayRows.map((block, index) => {
                 const stored = storedById.get(block.id) ?? block;
                 const isSelected = selectedId === block.id;
-                const inSelection = selectedIds.includes(block.id);
                 const isDragging = draggingId === block.id;
                 const sources = sourcesForBlock(stored.type, dataSources);
                 const sourceTypeLabel = dataSourceTypeLabel(stored.dataSource);
@@ -1314,7 +1176,6 @@ export default function App() {
                       "row",
                       `row-${block.type}`,
                       isSelected ? "selected" : "",
-                      inSelection && !isSelected ? "in-selection" : "",
                       isDragging ? "dragging" : "",
                       arranging ? "editable" : "",
                       index === displayRows.length - 1 ? "last" : "",
@@ -1334,7 +1195,7 @@ export default function App() {
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
-                      selectRow(block.id, e);
+                      setSelectedId(block.id);
                       setAddAtIndex(null);
                     }}
                   >
@@ -1343,7 +1204,7 @@ export default function App() {
                       preview={!arranging}
                       board={library?.previewBoard}
                       pack={pack}
-                      genreLabels={library?.genreChips.map((c) => c.label)}
+                      collections={library?.collections}
                     />
 
                     {arranging && (
@@ -1534,12 +1395,6 @@ export default function App() {
             <>
               <h2>{rowTitle(selected)}</h2>
               <p className="hint">{blockDef(selected.type).description}</p>
-              {selectedIds.length > 1 && (
-                <p className="hint">
-                  {selectedIds.length} rows selected. Delete removes all of them. Click without Ctrl
-                  to select one.
-                </p>
-              )}
               <div className="inspector-form">
                 <label className="checkbox">
                   <input
@@ -1606,70 +1461,21 @@ export default function App() {
                 {selected.type === "genreRail" && (
                   <div className="genre-targets">
                     <div className="genre-targets-head">
-                      <span>Chip destinations</span>
+                      <span>Text pills</span>
                       <span className="badge honored">Honored</span>
                     </div>
-                    <p className="hint">
-                      Point each genre chip at a catalog rail or collection folder. Automatic uses the
-                      matching Genres folder on the TV (same as long-press → Automatic).
-                    </p>
-                    {!session ? (
-                      <p className="hint quiet">Sign in to load Genres / Anime chips from your account.</p>
-                    ) : genreChipRows.length === 0 ? (
-                      <p className="hint quiet">
-                        No Genres collection found yet. Add a “Genres” collection on the TV, then refresh
-                        your Studio library.
+                    {parseCollectionHubDataSource(selected.dataSource) ? (
+                      <p className="hint">
+                        Pills are this collection’s folder titles. TV wraps each pill to the text
+                        width — we don’t pre-fill Action / Comedy / etc.
                       </p>
                     ) : (
-                      <ul className="genre-target-list">
-                        {genreChipRows.map((chip) => {
-                          const current = genreTargets[chip.key];
-                          const value = encodeGenreTarget(current);
-                          return (
-                            <li key={chip.key} className="genre-target-row">
-                              <div className="genre-target-chip">
-                                <span className="genre-chip-label">{chip.label}</span>
-                                <span className="genre-chip-dest quiet">
-                                  {describeGenreTarget(current, genreDestOptions)}
-                                </span>
-                              </div>
-                              <select
-                                className="genre-target-select"
-                                value={value}
-                                onChange={(e) => {
-                                  const next = decodeGenreTarget(e.target.value);
-                                  setGenreTargets((prev) => {
-                                    const copy = { ...prev };
-                                    if (!next) delete copy[chip.key];
-                                    else copy[chip.key] = next;
-                                    return copy;
-                                  });
-                                }}
-                              >
-                                <option value="">Automatic</option>
-                                <optgroup label="Catalog rails">
-                                  {genreDestOptions
-                                    .filter((o) => o.group === "catalog")
-                                    .map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                </optgroup>
-                                <optgroup label="Collection folders">
-                                  {genreDestOptions
-                                    .filter((o) => o.group === "folder")
-                                    .map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                </optgroup>
-                              </select>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                      <p className="hint">
+                        Point this rail at a collection to use that collection’s folders as pills, or
+                        leave Genres so the TV fills from installed catalogs. Use{" "}
+                        <strong>Turn into text pills</strong> on a collection rail to convert it in
+                        place.
+                      </p>
                     )}
                   </div>
                 )}
@@ -1729,6 +1535,34 @@ export default function App() {
                       )}
                   </>
                 )}
+
+                {parseCollectionHubDataSource(selected.dataSource) &&
+                  (selected.type === "collectionRail" || selected.type === "mediaRail") && (
+                    <>
+                      <button
+                        type="button"
+                        className="btn ghost full"
+                        onClick={turnSelectedIntoTextPills}
+                      >
+                        Turn into text pills
+                      </button>
+                      <p className="hint">
+                        Shrinks this rail into wrap-width text pills named after each folder. TV
+                        opens the folder when a pill is selected.
+                      </p>
+                    </>
+                  )}
+
+                {selected.type === "genreRail" &&
+                  parseCollectionHubDataSource(selected.dataSource) && (
+                    <button
+                      type="button"
+                      className="btn ghost full"
+                      onClick={turnSelectedIntoCollectionCards}
+                    >
+                      Turn back into collection cards
+                    </button>
+                  )}
 
                 {selected.w !== VIEWPORT_WIDTH || selected.x !== 0 ? (
                   <button
