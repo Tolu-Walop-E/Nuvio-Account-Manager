@@ -2,12 +2,11 @@ import type { NuvioConfig, NuvioSession } from "./types";
 
 const CONFIG_KEY = "nuvio_reframe_studio.config";
 const SESSION_KEY = "nuvio_reframe_studio.session";
-const PROFILE_KEY = "nuvio_reframe_studio.lastProfileId";
 
 export function defaultConfig(): NuvioConfig {
   const fromEnv: NuvioConfig = {
-    supabaseUrl: (process.env.NEXT_PUBLIC_NUVIO_SUPABASE_URL ?? "").trim(),
-    anonKey: (process.env.NEXT_PUBLIC_NUVIO_SUPABASE_ANON_KEY ?? "").trim(),
+    supabaseUrl: (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? "",
+    anonKey: (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ?? "",
   };
   const saved = loadConfig();
   return {
@@ -60,17 +59,15 @@ export function saveSession(session: NuvioSession | null) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
-export function loadLastStudioProfileId(userId: string): number {
-  try {
-    const raw = localStorage.getItem(`${PROFILE_KEY}:${userId}`);
-    const id = raw ? Number(raw) : 1;
-    if (!Number.isInteger(id) || id < 1 || id > 6) return 1;
-    return id;
-  } catch {
-    return 1;
-  }
+const PROFILE_KEY = "nuvio_reframe_studio.profileId";
+
+export function loadStudioProfileId(): number {
+  const raw = Number(localStorage.getItem(PROFILE_KEY));
+  if (Number.isInteger(raw) && raw >= 1 && raw <= 6) return raw;
+  return 1;
 }
 
-export function saveLastStudioProfileId(userId: string, profileId: number) {
-  localStorage.setItem(`${PROFILE_KEY}:${userId}`, String(profileId));
+export function saveStudioProfileId(profileId: number) {
+  const id = Number.isInteger(profileId) ? Math.min(6, Math.max(1, profileId)) : 1;
+  localStorage.setItem(PROFILE_KEY, String(id));
 }
