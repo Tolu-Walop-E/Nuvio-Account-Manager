@@ -2,11 +2,12 @@ import type { NuvioConfig, NuvioSession } from "./types";
 
 const CONFIG_KEY = "nuvio_reframe_studio.config";
 const SESSION_KEY = "nuvio_reframe_studio.session";
+const PROFILE_KEY = "nuvio_reframe_studio.profileId";
 
 export function defaultConfig(): NuvioConfig {
   const fromEnv: NuvioConfig = {
-    supabaseUrl: (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? "",
-    anonKey: (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ?? "",
+    supabaseUrl: (process.env.NEXT_PUBLIC_NUVIO_SUPABASE_URL ?? "").trim(),
+    anonKey: (process.env.NEXT_PUBLIC_NUVIO_SUPABASE_ANON_KEY ?? "").trim(),
   };
   const saved = loadConfig();
   return {
@@ -58,8 +59,6 @@ export function saveSession(session: NuvioSession | null) {
   }
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
-
-const PROFILE_KEY = "nuvio_reframe_studio.profileId";
 
 export function loadStudioProfileId(): number {
   const raw = Number(localStorage.getItem(PROFILE_KEY));
